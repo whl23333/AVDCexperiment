@@ -12,7 +12,7 @@ import cv2
 import imageio
 import json
 import os
-from flowdiffusion.inference_utils import get_video_model, pred_video
+from flowdiffusion.inference_utils import get_video_model, pred_video, get_video_model_change, get_video_model_GPT
 import random
 import torch
 from argparse import ArgumentParser
@@ -47,7 +47,8 @@ def run(args):
     max_replans = 5
 
 
-    video_model = get_video_model(ckpts_dir=args.ckpt_dir, milestone=args.milestone)
+    # video_model = get_video_model_change(ckpts_dir=args.ckpt_dir, milestone=args.milestone)
+    video_model = get_video_model_GPT(ckpts_dir=args.ckpt_dir, milestone=args.milestone)
     flow_model = get_flow_model()
 
     try:
@@ -131,6 +132,7 @@ if __name__ == "__main__":
             result_dict = json.load(f)
     except:
         result_dict = {}
+    print("hi")
 
     assert args.env_name in name2maskid.keys()
     if args.env_name in result_dict.keys():

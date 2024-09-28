@@ -1,0 +1,58 @@
+wandb:
+  wandb_project: "AVDC_change_pretrain"
+  wandb_entity: "whl23333-tsinghua-university"
+
+save_path: "../results12/pretrain"
+
+seed: 42
+sample_per_seq: 8
+valid_n: 1
+batch_size: 64
+train_steps: 30000
+device: "cuda"
+
+vqvae: 
+  action_window_size: 7
+  act_dim: 4
+  n_latent_dims: 512
+  vqvae_n_embed: 16
+  vqvae_groups: 2
+  act_scale: 10.0
+
+freeze:
+  implicit_model: False
+  action_decoder: True
+  diffusion: False
+
+models:
+  implicit_model:
+    model_name: "TwoStagePerceiverModel"
+    params:
+      num_freq_bands: 6
+      depth: 6
+      max_freq: 10.
+      first_img_channels: 3
+      img_input_channels: 64
+      img_input_axis: 2
+      text_input_channels: 512
+      text_input_axis: 1
+      num_latents: 7
+      latent_dim: 16
+  action_decoder:
+    model_name: "PretrainDecoder"
+    params:
+      dir: "../../results12/pretrain/fancy-bush-10"
+      device: "cuda"
+  preprocess:
+    model_name: "Preprocess"
+    params:
+      hidden_dim: 16
+      act_len: 7
+      n_latent_dims: 512
+  diffusion_action_model:
+    params:
+      action_rate: 0.5
+
+trainer:
+  results_folder: '../result5/mw'
+  train_batch_size: 3

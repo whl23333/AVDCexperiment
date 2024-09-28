@@ -1,9 +1,12 @@
 setup.py
+flowdiffusion/ImgTextPerceiver.py
 flowdiffusion/__init__.py
 flowdiffusion/goal_diffusion.py
+flowdiffusion/goal_diffusion_change.py
 flowdiffusion/goal_diffusion_policy.py
 flowdiffusion/goal_diffusion_v1.py
 flowdiffusion/inference_utils.py
+flowdiffusion/test.py
 flowdiffusion/unet.py
 flowdiffusion/utils.py
 flowdiffusion.egg-info/PKG-INFO

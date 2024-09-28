@@ -6,6 +6,8 @@ from .unet import UnetMW as Unet
 from .unet import UnetMWFlow as Unet_flow
 from .unet import UnetThor as Unet_thor
 from .unet import UnetBridge as Unet_bridge
+from .unet import UnetMWChange as UnetChange
+from .unet import NewUnetMW
 from transformers import CLIPTextModel, CLIPTokenizer
 from torchvision import transforms as T
 from einops import rearrange
@@ -13,6 +15,13 @@ import torch
 from PIL import Image
 from torch import nn
 import numpy as np
+from .goal_diffusion_change import GoalGaussianDiffusion as GoalGaussianDiffusionChange
+from .goal_diffusion_change import Trainer as TrainerChange
+from .goal_diffusion_change import ActionDecoder, ConditionModel, Preprocess, DiffusionActionModel, SimpleActionDecoder, PretrainDecoder
+from .goal_diffusion_change import DiffusionActionModelWithGPT
+import os
+import yaml
+from .ImgTextPerceiver import ImgTextPerceiverModel, ConvImgTextPerceiverModel, TwoStagePerceiverModel
 
 def get_diffusion_policy_T(ckpt_dir='../ckpts/diffusion_policy_T', milestone=1, sampling_timesteps=10):
     unet = TransformerNet()
@@ -177,6 +186,154 @@ def get_video_model(ckpts_dir='../ckpts/metaworld', milestone=24, flow=False, ti
     trainer.load(milestone)
     return trainer
         
+def get_video_model_change(ckpts_dir='../ckpts/metaworld', milestone=24, flow=False, timestep=100):
+    current_dir = os.path.dirname(__file__)
+    config_path = os.path.join(current_dir, '../../configs/config.yaml')
+    with open(config_path, "r") as file:
+        cfg = yaml.safe_load(file)
+    
+    unet = Unet_flow() if flow else UnetChange()
+    pretrained_model = "openai/clip-vit-base-patch32"
+    tokenizer = CLIPTokenizer.from_pretrained(pretrained_model)
+    text_encoder = CLIPTextModel.from_pretrained(pretrained_model)
+    text_encoder.requires_grad_(False)
+    text_encoder.eval()
+    
+    sample_per_seq = cfg["sample_per_seq"]
+    target_size = (128, 128)
+    channels = 3 if not flow else 2
+
+    diffusion = GoalGaussianDiffusionChange(
+        channels=channels*(sample_per_seq-1),
+        model=unet,
+        image_size=target_size,
+        timesteps=100,
+        sampling_timesteps=timestep,
+        loss_type='l2',
+        objective='pred_v',
+        beta_schedule = 'cosine',
+        min_snr_loss_weight = True,
+    )
+
+    # implicit_model
+    model_name = cfg["models"]["implicit_model"]["model_name"]
+    model_params = cfg["models"]["implicit_model"]["params"]
+    class_ = globals()[model_name]
+    implicit_model = class_(**model_params)
+
+    # action_decoder
+    model_name = cfg["models"]["action_decoder"]["model_name"]
+    model_params = cfg["models"]["action_decoder"]["params"]
+    class_ = globals()[model_name]
+    action_decoder = class_(**model_params)
+
+    # condition_model
+    condition_model = ConditionModel()
+
+    # preprocess
+    model_name = cfg["models"]["preprocess"]["model_name"]
+    model_params = cfg["models"]["preprocess"]["params"]
+    class_ = globals()[model_name]
+    preprocess = class_(**model_params)
+
+    diffusion_action_model11 = DiffusionActionModel(
+        diffusion,
+        implicit_model,
+        action_decoder,
+        condition_model,
+        preprocess,
+        action_rate = cfg["models"]["diffusion_action_model"]["params"]["action_rate"],
+    )
+    
+    trainer = TrainerChange(
+        diffusion_action_model=diffusion_action_model11,
+        tokenizer=tokenizer, 
+        text_encoder=text_encoder,
+        train_set=[1],
+        valid_set=[1],
+        results_folder = ckpts_dir,
+        fp16 =True,
+        amp=True,
+    )
+    
+    trainer.load_resume(milestone)
+    return trainer   
+
+
+def get_video_model_GPT(ckpts_dir='../ckpts/metaworld', milestone=24, flow=False, timestep=100):
+    current_dir = os.path.dirname(__file__)
+    config_path = os.path.join(current_dir, '../../configs/config.yaml')
+    with open(config_path, "r") as file:
+        cfg = yaml.safe_load(file)
+    
+    unet = Unet_flow() if flow else NewUnetMW()
+    pretrained_model = "openai/clip-vit-base-patch32"
+    tokenizer = CLIPTokenizer.from_pretrained(pretrained_model)
+    text_encoder = CLIPTextModel.from_pretrained(pretrained_model)
+    text_encoder.requires_grad_(False)
+    text_encoder.eval()
+    
+    sample_per_seq = cfg["sample_per_seq"]
+    target_size = (128, 128)
+    channels = 3 if not flow else 2
+
+    diffusion = GoalGaussianDiffusionChange(
+        channels=channels*(sample_per_seq-1),
+        model=unet,
+        image_size=target_size,
+        timesteps=100,
+        sampling_timesteps=timestep,
+        loss_type='l2',
+        objective='pred_v',
+        beta_schedule = 'cosine',
+        min_snr_loss_weight = True,
+    )
+
+    # implicit_model
+    model_name = cfg["models"]["implicit_model"]["model_name"]
+    model_params = cfg["models"]["implicit_model"]["params"]
+    class_ = globals()[model_name]
+    implicit_model = class_(**model_params)
+
+    # action_decoder
+    model_name = cfg["models"]["action_decoder"]["model_name"]
+    model_params = cfg["models"]["action_decoder"]["params"]
+    class_ = globals()[model_name]
+    action_decoder = class_(**model_params)
+
+    # condition_model
+    condition_model = ConditionModel()
+
+    # preprocess
+    model_name = cfg["models"]["preprocess"]["model_name"]
+    model_params = cfg["models"]["preprocess"]["params"]
+    class_ = globals()[model_name]
+    preprocess = class_(**model_params)
+
+    diffusion_action_model_GPT = DiffusionActionModelWithGPT(
+        diffusion,
+        action_decoder,
+        condition_model,
+        action_rate = cfg["models"]["diffusion_action_model"]["params"]["action_rate"],
+        n_layer=12,
+        n_head=4
+    )
+    
+    trainer = TrainerChange(
+        diffusion_action_model=diffusion_action_model_GPT,
+        tokenizer=tokenizer, 
+        text_encoder=text_encoder,
+        train_set=[1],
+        valid_set=[1],
+        results_folder = ckpts_dir,
+        fp16 =True,
+        amp=True,
+    )
+    
+    trainer.load_resume(milestone)
+    return trainer        
+
+
 def get_video_model_thor(ckpts_dir='../ckpts/ithor', milestone=30):
     unet = Unet_thor()
     pretrained_model = "openai/clip-vit-base-patch32"
